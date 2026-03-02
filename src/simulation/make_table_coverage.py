@@ -7,22 +7,21 @@ import pandas as pd
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Build summary tables from coverage simulation CSVs.")
-    p.add_argument("--indir", type=str, required=True, help="Folder containing coverage_vary_p.csv and coverage_vary_n.csv")
-    p.add_argument("--outdir", type=str, required=True, help="Folder where summary tables will be written")
+    p = argparse.ArgumentParser(description="Build summary tables from pointwise coverage simulation CSVs.")
+    p.add_argument("--indir", type=str, required=True,
+                   help="Folder containing coverage_vary_p.csv and coverage_vary_n.csv")
+    p.add_argument("--outdir", type=str, required=True,
+                   help="Folder where summary tables will be written")
     p.add_argument(
-        "--power-points",
+        "--points",
         type=str,
-        default="0.005,0.01,0.0125,0.015,0.02,0.05,0.10,0.20",
-        help="Comma-separated list of true p values where we want a power snapshot (nearest grid point used).",
+        default="0.001,0.005,0.01,0.015,0.02,0.05,0.10,0.20",
+        help="Comma-separated list of p_true values where we want a coverage snapshot (nearest grid point used).",
     )
     return p.parse_args()
 
 
 def _nearest_rows(df, col, targets):
-    """
-    For each target value, pick the row in df minimizing |df[col] - target|.
-    """
     rows = []
     xs = df[col].to_numpy()
     for t in targets:
@@ -50,39 +49,36 @@ def main():
     df_n = pd.read_csv(path_n)
 
     # -------------------------
-    # Type I summary (use vary-n)
+    # (A) Full table for vary-n
     # -------------------------
-    # If p_true == p0 in df_n, that rejection rate estimates type-I error.
-    # Otherwise, we still produce the table but it should be interpreted as power.
-    type1 = df_n.copy()
-    type1["is_null"] = np.isclose(type1["p_true"], type1["p0"])
-
-    type1_tbl = type1[[
-        "n", "p_true", "p0", "alpha", "n_mc", "is_null",
-        "rej_rate_e", "rej_rate_pmf", "rej_rate_cp", "rej_rate_jeffreys"
+    vary_n_tbl = df_n[[
+        "n", "p_true", "alpha", "n_mc",
+        "cov_rate_e", "cov_rate_pmf", "cov_rate_cp", "cov_rate_jeffreys",
+        "rej_rate_e", "rej_rate_pmf", "rej_rate_cp", "rej_rate_jeffreys",
     ]].sort_values("n")
 
-    out_type1 = os.path.join(args.outdir, "type1_summary.csv")
-    type1_tbl.to_csv(out_type1, index=False)
+    out_vary_n = os.path.join(args.outdir, "coverage_summary_vary_n.csv")
+    vary_n_tbl.to_csv(out_vary_n, index=False)
 
     # -------------------------
-    # Power snapshots (use vary-p)
+    # (B) Coverage snapshots for vary-p
     # -------------------------
-    targets = [float(x.strip()) for x in args.power_points.split(",") if x.strip() != ""]
+    targets = [float(x.strip()) for x in args.points.split(",") if x.strip() != ""]
     picked = _nearest_rows(df_p.sort_values("p_true"), col="p_true", targets=targets)
 
-    power_tbl = picked[[
+    snap_tbl = picked[[
         "_target", "_picked",
-        "n", "p0", "alpha", "n_mc",
-        "rej_rate_e", "rej_rate_pmf", "rej_rate_cp", "rej_rate_jeffreys"
-    ]].rename(columns={"_target": "target_p", "_picked": "grid_p"})
+        "n", "alpha", "n_mc",
+        "cov_rate_e", "cov_rate_pmf", "cov_rate_cp", "cov_rate_jeffreys",
+        "rej_rate_e", "rej_rate_pmf", "rej_rate_cp", "rej_rate_jeffreys",
+    ]].rename(columns={"_target": "target_p_true", "_picked": "grid_p_true"})
 
-    out_power = os.path.join(args.outdir, "power_summary.csv")
-    power_tbl.to_csv(out_power, index=False)
+    out_snap = os.path.join(args.outdir, "coverage_snapshot_vary_p.csv")
+    snap_tbl.to_csv(out_snap, index=False)
 
     print("Saved tables:")
-    print(f" - {out_type1}")
-    print(f" - {out_power}")
+    print(f" - {out_vary_n}")
+    print(f" - {out_snap}")
 
 
 if __name__ == "__main__":
